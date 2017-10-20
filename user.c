@@ -12,6 +12,10 @@
 
 #define billion 1000000000
 
+#define SEM_NAME "/SEMMY"
+
+void exitfuncCtrlC(int sig);
+
 enum message {
  parent, child_terminate
 };
@@ -37,6 +41,13 @@ int main (int argc, char *argv[]){
   long randomTime =0;
   int criticalFlag = 1;
 
+  //printf("check check");
+
+  if (signal(SIGINT, exitfuncCtrlC) == SIG_ERR) {
+       printf("SIGINT error\n");
+       exit(1);
+   }
+
   if ((id = shmget(shmKey,sizeof(shm), IPC_CREAT | 0666)) < 0){
        perror("SHMGET");
        exit(1);
@@ -47,11 +58,13 @@ int main (int argc, char *argv[]){
        exit(1);
    }
 
-   sem_t *sem = sem_open("mySem", O_RDWR);
-   if (sem == SEM_FAILED) {
-       perror("sem_open(3) failed in child");
-       exit(EXIT_FAILURE);
+   sem_t *semaphore = sem_open(SEM_NAME, O_RDWR);
+   if (semaphore == SEM_FAILED) {
+     perror("sem_open(3) failed");
+     exit(EXIT_FAILURE);
    }
+
+
 
 //gett the time from shmMsg, add the random time to it, shmSeconds and
   long shmSeconds = shmPtr->seconds;
@@ -66,24 +79,38 @@ int main (int argc, char *argv[]){
 
 
   while(criticalFlag){
-    sem_wait(sem);      //waits for the semaphore to free up
+    //printf("made into crtical loop");
+    if (sem_wait(semaphore) < 0) {
+            perror("sem_wait(3) failed on child");
+            continue;
+    }
+
 
     if((shmPtr->seconds >= shmSeconds) && (shmPtr->nanoseconds >= shmNano) && shmPtr->shmMsg[1] == 0){
+      printf("inside child, about to terminate.  PID:  %d \n", getpid());
       shmPtr->shmMsg[0] = shmSeconds;
       shmPtr->shmMsg[1] = shmNano;
       criticalFlag = 0;
-      sem_post(sem);
     }
-    sem_post(sem);
-  }
 
-  //printf("\ninside of user process;  pid: %ld ; shmMsg: %s\n", (long)pid, shmMsgContent);
-  //printf("\nSeconds and nanoseconds: %d . %d", shmSeconds, shmNano);
-  //strncpy(shmPtr->shmMsg, shmMsgContent, 256);
+    if(sem_post(semaphore) < 0) {
+      perror("sem_post(3) error on child");
+    }
+    //sleep(1);
+
+  }
+  if (sem_close(semaphore) < 0)
+    perror("sem_close(3) failed");
   shmdt(shmPtr);					//must detach the shared memory
-  //shmctl(id, IPC_RMID, NULL);		//setting the control of the shared memory using the variable id = shmget(key,sizeof(shm), IPC_CREAT | 0666);
-  //kill(pid, SIGTERM);
-//  sem_post (sem);
+
   return 0;
 
+}
+
+void exitfuncCtrlC(int sig){
+
+    fprintf( stderr, "Child %ld is dying from parent\n", (long)getpid());
+    shmdt(shmPtr);
+    sem_unlink(SEM_NAME);
+    exit(1);
 }

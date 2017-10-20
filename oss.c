@@ -13,10 +13,18 @@
 #include <fcntl.h>           /* For O_* constants */
 #include <sys/stat.h>        /* For mode constants */
 #include <semaphore.h>
+#include <errno.h>
 
 #define billion 1000000000
 
+// semaphore globals
+#define SEM_NAME "/SEMMY"
+#define SEM_PERMS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
+#define INITIAL_VALUE 1
+#define CHILD_PROGRAM "./user"
+
 void ChildProcess(void);
+void exitfuncCtrlC(int sig);
 
 enum message {
  parent, child_terminate
@@ -103,6 +111,10 @@ int main (int argc, char *argv[]){
 
 
 
+    if (signal(SIGINT, exitfuncCtrlC) == SIG_ERR) {
+        printf("SIGINT error\n");
+        exit(1);
+    }
 
     int needMoreProc = 1;
     int processCount = 0;
@@ -129,20 +141,26 @@ int main (int argc, char *argv[]){
 
       shmPtr->seconds = 0;
       shmPtr->nanoseconds = 0;
-      shmPtr->shmMsg[0] = 20;
-      shmPtr->shmMsg[1] = 30;
+      shmPtr->shmMsg[0] = 0;
+      shmPtr->shmMsg[1] = 0;
       //strncpy(shmPtr->shmMsg,shmMsgNull,256);
 
-      // initialize semaphores
-      sem_t *sem = sem_open("mySem", O_CREAT | O_EXCL, 0666, 1);
+      /* We initialize the semaphore counter to 1 (INITIAL_VALUE) */
+      sem_t *semaphore = sem_open(SEM_NAME, O_CREAT | O_EXCL, SEM_PERMS, INITIAL_VALUE);
 
-      if (sem_close(sem) < 0) {
-          perror("sem_close(3) failed in master");
-          sem_unlink("mySem");
+       if (semaphore == SEM_FAILED) {
+           perror("sem_open(3) error boooo");
+           exit(EXIT_FAILURE);
+       }
+
+       /* Close the semaphore as we won't be using it in the parent process */
+      if (sem_close(semaphore) < 0) {
+          perror("sem_close(3) failed");
+          /* We ignore possible sem_unlink(3) errors here */
+          sem_unlink(SEM_NAME);
           exit(EXIT_FAILURE);
       }
 
-      printf("made it to here");
 
 
 
@@ -183,12 +201,14 @@ int main (int argc, char *argv[]){
       int runMainLoop = 1;
       int stat;
 
+
       while(runMainLoop){
 
         long sec = shmPtr->seconds;
         long nans = shmPtr->nanoseconds;
         long shmMsgSecond = shmPtr->shmMsg[0];
         long shmMsgNano = shmPtr->shmMsg[1];
+        int newForkFlag = 1;
 
         //strncpy(shmMsgContent, shmPtr->shmMsg, 256);
 
@@ -196,10 +216,12 @@ int main (int argc, char *argv[]){
           pid_t childPid = wait(NULL);                    //waits for the signal from child; get's pid
           fprintf(file_ptr, "Master: Child %ld is terminating at my time %ld.%ld because it reached %ld.%ld in slave \n", (long)childPid, sec, nans, shmMsgSecond,shmMsgNano);
           //strncpy(shmPtr->shmMsg, shmMsgNull, 256);    //sets shmMsg back to '\0'
-          shmMsgNano = 0;
+          shmPtr->shmMsg[0] = 0;
+          shmPtr->shmMsg[1] = 0;
           totProcCount++;
+          newForkFlag =0;
         }
-        if (totProcCount<100 && sec != 2) {  //implement the time check later; if(ossTime<2) && sysTime<specifiedTime
+        if (totProcCount<100 && sec != 2 && newForkFlag) {  //implement the time check later; if(ossTime<2) && sysTime<specifiedTime
           pid_t pid;
           //totProcCount++;
           if((pid = fork()) == 0){
@@ -224,16 +246,31 @@ int main (int argc, char *argv[]){
     shmdt(shmPtr);					//must detach the shared memory
     shmctl(id, IPC_RMID, NULL);   //setting the control of the shared memory using the variable id = shmget(key,sizeof(shm), IPC_CREAT | 0666);
     fclose(file_ptr);
-    sem_unlink("mySem");
+
     }//runIt END
 
     //----------------------------------------------------------------------------------------------------
+    if (sem_unlink(SEM_NAME) < 0)
+        perror("sem_unlink(3) failed");
 
-
+    return 0;
 }
 
 
 void ChildProcess(void){
-    char *args[]={"./user",NULL};
-    execvp(args[0],args);
+    // char *args[]={"./user",NULL};
+    // execvp(args[0],args);
+
+    if (execl(CHILD_PROGRAM, CHILD_PROGRAM, NULL) < 0) {
+      perror("execl(2) failed");
+      exit(EXIT_FAILURE);
+    }
+}
+
+void exitfuncCtrlC(int sig){
+
+    fprintf( stderr, "Child %ld is dying from parent\n", (long)getpid());
+    shmdt(shmPtr);
+    sem_unlink(SEM_NAME);
+    exit(1);
 }
