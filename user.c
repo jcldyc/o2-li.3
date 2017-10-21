@@ -12,7 +12,7 @@
 
 #define billion 1000000000
 
-#define SEM_NAME "/sema"
+#define SEM_NAME "/sem"
 
 void exitfuncCtrlC(int sig);
 
@@ -76,6 +76,7 @@ int main (int argc, char *argv[]){
 
 
   while(criticalFlag){
+    //printf("inside criticalflag loop: pid: %ld\n", (long)getpid());
     if (sem_wait(semaphore) < 0) {
             perror("sem_wait(3) failed on child");
             continue;
@@ -85,7 +86,7 @@ int main (int argc, char *argv[]){
     long shmNano1= shmPtr->nanoseconds;
 
     if((shmSeconds1 >= shmSeconds) && (shmNano1 >= shmNano) && shmPtr->shmMsg[1] == 0){
-      printf("inside child, about to terminate.  PID:  %d shmMsgTime: %ld.%ld\n", getpid(), shmSeconds, shmNano);
+      //printf("inside child, about to terminate.  PID:  %d shmMsgTime: %ld.%ld\n", getpid(), shmSeconds, shmNano);
       shmPtr->shmMsg[0] = shmSeconds;
       shmPtr->shmMsg[1] = shmNano;
       criticalFlag = 0;
