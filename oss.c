@@ -18,7 +18,7 @@
 #define billion 1000000000
 
 // semaphore globals
-#define SEM_NAME "/semmy"
+#define SEM_NAME "/sema"
 #define SEM_PERMS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define INITIAL_VALUE 1
 #define CHILD_PROGRAM "./user"
@@ -160,6 +160,9 @@ int main (int argc, char *argv[]){
            exit(EXIT_FAILURE);
        }
 
+       
+
+
           /* Close the semaphore as we won't be using it in the parent process */
        if (sem_close(semaphore) < 0) {
            perror("sem_close(3) failed");
@@ -178,9 +181,10 @@ int main (int argc, char *argv[]){
       while(needMoreProc){
         if(processCount < maxNumOfSlaves){
         //  fprintf(file_ptr, "total process count: %d \n", totProcCount);
+          totProcCount++;
           if ((cpid[processCount] = fork()) == 0){
             //printf("total process count: %d", totProcCount);
-            totProcCount++;
+            //totProcCount++;
             sleep(1);
             ChildProcess();
           }
@@ -189,7 +193,7 @@ int main (int argc, char *argv[]){
             processCount--;       //if the process fails, try to fork again and fill that same array space
 
           }
-        }else if (processCount>=maxNumOfSlaves){
+        }else if (maxNumOfSlaves>=processCount){
           needMoreProc=0;
         }
 
@@ -197,7 +201,8 @@ int main (int argc, char *argv[]){
       //  totProcCount++;
 
       }
-
+      printf("procCount: %d\n", processCount);
+      printf("totProcCount: %d\n", totProcCount);
       //----------------------------------------------------------------------------------------------------
 
 

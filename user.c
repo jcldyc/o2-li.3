@@ -12,7 +12,7 @@
 
 #define billion 1000000000
 
-#define SEM_NAME "/semmy"
+#define SEM_NAME "/sema"
 
 void exitfuncCtrlC(int sig);
 
@@ -33,8 +33,6 @@ int main (int argc, char *argv[]){
   int id;
   int shmKey = 3699;
   pid_t pid = getpid();
-  char shmMsgContent[256];
-  FILE *file_ptr;
   long randomTime =0;
   int criticalFlag = 1;
 
@@ -54,12 +52,14 @@ int main (int argc, char *argv[]){
        perror("SHMAT");
        exit(1);
    }
+   //printf("right before sem_open\n")
 
-   sem_t *semaphore = sem_open(SEM_NAME, O_RDWR);
+    sem_t *semaphore = sem_open(SEM_NAME, O_RDWR);
     if (semaphore == SEM_FAILED) {
-        perror("sem_open(3) failed");
+        perror("sem_open(3) failed in child");
         exit(EXIT_FAILURE);
     }
+
 
 
 
@@ -91,9 +91,11 @@ int main (int argc, char *argv[]){
       criticalFlag = 0;
     }
 
-    if (sem_post(semaphore) < 0) {
-            perror("sem_post(3) error on child");
-        }
+
+
+      if (sem_post(semaphore) < 0) {
+              perror("sem_post(3) error on child");
+      }
     //sleep(1);
 
   }
