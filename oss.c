@@ -307,13 +307,13 @@ int main (int argc, char *argv[]){
 
 
 void ChildProcess(void){
-    // char *args[]={"./user",NULL};
-    // execvp(args[0],args);
+    char *args[]={"./user",NULL};
+    execvp(args[0],args);
 
-    if (execl(CHILD_PROGRAM, CHILD_PROGRAM, NULL) < 0) {
-      perror("execl(2) failed");
-      exit(EXIT_FAILURE);
-    }
+    // if (execl(CHILD_PROGRAM, CHILD_PROGRAM, NULL) < 0) {
+    //   perror("execl(2) failed");
+    //   exit(EXIT_FAILURE);
+    // }
 }
 
 void ctrlPlusC(int sig){
