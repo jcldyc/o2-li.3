@@ -12,17 +12,14 @@
 
 #define billion 1000000000
 
-#define SEM_NAME "/SEMMY"
+#define SEM_NAME "/semmy"
 
 void exitfuncCtrlC(int sig);
 
-enum message {
- parent, child_terminate
-};
 
 typedef struct ShmData{             //struct used to hold the seconds, nanoseconds, and shmMsg and reference in shared memory
-  int seconds;
-  int nanoseconds;
+  long seconds;
+  long nanoseconds;
   long shmMsg[2];
 
   //enum message shmMsg;
@@ -59,10 +56,10 @@ int main (int argc, char *argv[]){
    }
 
    sem_t *semaphore = sem_open(SEM_NAME, O_RDWR);
-   if (semaphore == SEM_FAILED) {
-     perror("sem_open(3) failed");
-     exit(EXIT_FAILURE);
-   }
+    if (semaphore == SEM_FAILED) {
+        perror("sem_open(3) failed");
+        exit(EXIT_FAILURE);
+    }
 
 
 
@@ -79,23 +76,24 @@ int main (int argc, char *argv[]){
 
 
   while(criticalFlag){
-    //printf("made into crtical loop");
     if (sem_wait(semaphore) < 0) {
             perror("sem_wait(3) failed on child");
             continue;
-    }
+        }
 
+    long shmSeconds1 = shmPtr->seconds;
+    long shmNano1= shmPtr->nanoseconds;
 
-    if((shmPtr->seconds >= shmSeconds) && (shmPtr->nanoseconds >= shmNano) && shmPtr->shmMsg[1] == 0){
-      printf("inside child, about to terminate.  PID:  %d \n", getpid());
+    if((shmSeconds1 >= shmSeconds) && (shmNano1 >= shmNano) && shmPtr->shmMsg[1] == 0){
+      printf("inside child, about to terminate.  PID:  %d shmMsgTime: %ld.%ld\n", getpid(), shmSeconds, shmNano);
       shmPtr->shmMsg[0] = shmSeconds;
       shmPtr->shmMsg[1] = shmNano;
       criticalFlag = 0;
     }
 
-    if(sem_post(semaphore) < 0) {
-      perror("sem_post(3) error on child");
-    }
+    if (sem_post(semaphore) < 0) {
+            perror("sem_post(3) error on child");
+        }
     //sleep(1);
 
   }

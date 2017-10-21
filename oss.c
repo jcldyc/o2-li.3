@@ -18,27 +18,30 @@
 #define billion 1000000000
 
 // semaphore globals
-#define SEM_NAME "/SEMMY"
+#define SEM_NAME "/semmy"
 #define SEM_PERMS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define INITIAL_VALUE 1
 #define CHILD_PROGRAM "./user"
 
 void ChildProcess(void);
-void exitfuncCtrlC(int sig);
+void ctrlPlusC(int sig);
 
-enum message {
- parent, child_terminate
-};
+
 
 typedef struct ShmData{             //struct used to hold the seconds, nanoseconds, and shmMsg and reference in shared memory
-  int seconds;
-  int nanoseconds;
+  long seconds;
+  long nanoseconds;
   long shmMsg[2];
   //enum message shmMsg;
 }shmData;
 
 shmData shm;
 shmData *shmPtr;
+
+
+
+
+
 
 int main (int argc, char *argv[]){
   int option;
@@ -54,6 +57,7 @@ int main (int argc, char *argv[]){
   shmPtr = &shm;			                 //points the shared memory pointer to teh address in shared memory
   int id;
   int loopAdd = 300000;                 //the amount added to nanoseconds on each loop
+
 
 
 //----------------------getOpt-------------------------------------------------------------------
@@ -111,10 +115,12 @@ int main (int argc, char *argv[]){
 
 
 
-    if (signal(SIGINT, exitfuncCtrlC) == SIG_ERR) {
+    if (signal(SIGINT, ctrlPlusC) == SIG_ERR) {
         printf("SIGINT error\n");
         exit(1);
     }
+
+
 
     int needMoreProc = 1;
     int processCount = 0;
@@ -134,8 +140,7 @@ int main (int argc, char *argv[]){
         exit(1);
       }
 
-      char shmMsgContent[256]; //shmMsg
-      char shmMsgNull[256] = {'\0'};
+
       pid_t cpid[maxNumOfSlaves];             //this array of pid_t holds the pid's of all the processes running currently
                                               //when a child is terminated && totProcCount <100 && time!=totatlAlottedTime, create new child, add id to array
 
@@ -145,21 +150,23 @@ int main (int argc, char *argv[]){
       shmPtr->shmMsg[1] = 0;
       //strncpy(shmPtr->shmMsg,shmMsgNull,256);
 
-      /* We initialize the semaphore counter to 1 (INITIAL_VALUE) */
-      sem_t *semaphore = sem_open(SEM_NAME, O_CREAT | O_EXCL, SEM_PERMS, INITIAL_VALUE);
+
+
+       /* We initialize the semaphore counter to 1 (INITIAL_VALUE) */
+       sem_t *semaphore = sem_open(SEM_NAME, O_CREAT | O_EXCL, SEM_PERMS, INITIAL_VALUE);
 
        if (semaphore == SEM_FAILED) {
-           perror("sem_open(3) error boooo");
+           perror("sem_open(3) error");
            exit(EXIT_FAILURE);
        }
 
-       /* Close the semaphore as we won't be using it in the parent process */
-      if (sem_close(semaphore) < 0) {
-          perror("sem_close(3) failed");
-          /* We ignore possible sem_unlink(3) errors here */
-          sem_unlink(SEM_NAME);
-          exit(EXIT_FAILURE);
-      }
+          /* Close the semaphore as we won't be using it in the parent process */
+       if (sem_close(semaphore) < 0) {
+           perror("sem_close(3) failed");
+           /* We ignore possible sem_unlink(3) errors here */
+           sem_unlink(SEM_NAME);
+           exit(EXIT_FAILURE);
+       }
 
 
 
@@ -170,10 +177,10 @@ int main (int argc, char *argv[]){
 
       while(needMoreProc){
         if(processCount < maxNumOfSlaves){
-          fprintf(file_ptr, "total process count: %d \n", totProcCount);
-          totProcCount++;
+        //  fprintf(file_ptr, "total process count: %d \n", totProcCount);
           if ((cpid[processCount] = fork()) == 0){
-            printf("total process count: %d", totProcCount);
+            //printf("total process count: %d", totProcCount);
+            totProcCount++;
             sleep(1);
             ChildProcess();
           }
@@ -209,19 +216,30 @@ int main (int argc, char *argv[]){
         long shmMsgSecond = shmPtr->shmMsg[0];
         long shmMsgNano = shmPtr->shmMsg[1];
         int newForkFlag = 1;
+        //printf("\t\tIm here in runMainLoop\n");
 
         //strncpy(shmMsgContent, shmPtr->shmMsg, 256);
 
         if(shmMsgNano != 0){  //need to add the time check here as well; time != 2 seconds
           pid_t childPid = wait(NULL);                    //waits for the signal from child; get's pid
+          printf("\t\tIm here in runMainLoop\n");
           fprintf(file_ptr, "Master: Child %ld is terminating at my time %ld.%ld because it reached %ld.%ld in slave \n", (long)childPid, sec, nans, shmMsgSecond,shmMsgNano);
           //strncpy(shmPtr->shmMsg, shmMsgNull, 256);    //sets shmMsg back to '\0'
           shmPtr->shmMsg[0] = 0;
           shmPtr->shmMsg[1] = 0;
           totProcCount++;
-          newForkFlag =0;
+          processCount--;
+
         }
-        if (totProcCount<100 && sec != 2 && newForkFlag) {  //implement the time check later; if(ossTime<2) && sysTime<specifiedTime
+
+        if((totProcCount>=100) || (sec >= 2)){
+          runMainLoop=0;
+          printf("totProcCount: %d\n", totProcCount);
+          printf("sim time: %ld.%ld\n", sec, nans);
+          newForkFlag = 0;
+
+        }
+        else if((totProcCount<100) && (sec != 2) && newForkFlag && (processCount < maxNumOfSlaves)) {  //implement the time check later; if(ossTime<2) && sysTime<specifiedTime
           pid_t pid;
           //totProcCount++;
           if((pid = fork()) == 0){
@@ -229,9 +247,6 @@ int main (int argc, char *argv[]){
           }else if(pid<0){
             printf("\tError forking child");
           }
-        }else if((totProcCount>=100) || (sec >= 2)){
-          runMainLoop=0;
-          printf("totProcCount: %d\n", totProcCount);
         }
         shmPtr->nanoseconds += loopAdd;
         // int sec = shmPtr->seconds;
@@ -241,6 +256,7 @@ int main (int argc, char *argv[]){
           shmPtr->seconds++;
           shmPtr->nanoseconds = nans % billion;
         }
+      //  printf("time %ld.%ld", shmPtr->seconds, shmPtr->nanoseconds);
       }
       sleep(1);
     shmdt(shmPtr);					//must detach the shared memory
@@ -267,7 +283,7 @@ void ChildProcess(void){
     }
 }
 
-void exitfuncCtrlC(int sig){
+void ctrlPlusC(int sig){
 
     fprintf( stderr, "Child %ld is dying from parent\n", (long)getpid());
     shmdt(shmPtr);
